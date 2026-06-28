@@ -15,8 +15,10 @@ env/
 .env
 .env.local
 
-# TLS certs (self-signed, local dev only)
-
+# TLS certs / private keys (self-signed, local dev only — never commit)
+certs/
+*.pem
+*.key
 
 # IDE
 .vscode/
