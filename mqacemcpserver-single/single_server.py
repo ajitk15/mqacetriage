@@ -20,6 +20,8 @@ from mcp.server.fastmcp import FastMCP
 from server import (
     ace_helpers,
     composite_tools,
+    dynatrace_helpers,
+    dynatrace_tools,
     mq_helpers,
     query_log,
     splunk_helpers,
@@ -38,6 +40,7 @@ from server.config import (
     MCP_TRANSPORT,
     QUERY_LOG_ENABLED,
     ace_configured,
+    dynatrace_configured,
     mq_configured,
     splunk_configured,
     tls_enabled,
@@ -53,6 +56,7 @@ mcp = FastMCP("mqacemcpserver-single", host=MCP_HOST, port=MCP_PORT)
 
 composite_tools.register(mcp)
 splunk_tools.register(mcp)
+dynatrace_tools.register(mcp)
 
 
 async def _shutdown() -> None:
@@ -61,6 +65,7 @@ async def _shutdown() -> None:
         mq_helpers.aclose_http_client(),
         ace_helpers.aclose_http_client(),
         splunk_helpers.aclose_http_client(),
+        dynatrace_helpers.aclose_http_client(),
         return_exceptions=True,
     )
 
@@ -76,6 +81,7 @@ async def _healthz_app(scope, receive, send) -> None:
         "mq_configured": mq_configured(),
         "ace_configured": ace_configured(),
         "splunk_configured": splunk_configured(),
+        "dynatrace_configured": dynatrace_configured(),
         "manifests": manifest_status(),
     }
     body = json.dumps(payload).encode("utf-8")

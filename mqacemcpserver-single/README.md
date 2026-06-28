@@ -38,11 +38,16 @@ against the same upstream MQ / ACE infrastructure and the same CSV manifests.
 | `splunk_search_logs` | (Splunk — read-only SPL) | "search the MQ/ACE logs for term/code X in the last N hours" |
 | `splunk_mq_errors` | (Splunk — read-only SPL) | "recent AMQ error-log events for queue manager X" |
 | `splunk_ace_errors` | (Splunk — read-only SPL) | "recent BIP/error events for integration node X" |
+| `dynatrace_host_performance` | (Dynatrace — read-only API v2) | "CPU / memory / disk trend on host X over the last N hours" |
+| `dynatrace_mq_metrics` | (Dynatrace — read-only API v2) | "queue depth / message-rate trend for queue manager X" |
+| `dynatrace_ace_metrics` | (Dynatrace — read-only API v2) | "flow throughput / processing-time trend for node X" |
+| `dynatrace_problems` | (Dynatrace — read-only API v2) | "problems / alerts on host X over the last N hours" |
+| `dynatrace_list_metrics` | (Dynatrace — read-only API v2) | "what MQ/ACE metric keys does Dynatrace have" |
 
 Each tool keeps the same safety contract as the root server:
 
-- Read-only MQSC enforced via `is_modification_command`; read-only SPL via `is_unsafe_spl`.
-- Hostname allow-list (MQ / ACE / Splunk) enforced before every outbound HTTP call.
+- Read-only MQSC enforced via `is_modification_command`; read-only SPL via `is_unsafe_spl`. The Dynatrace tools call GET-only v2 APIs (inherently read-only) and quote entity names to prevent selector injection.
+- Hostname allow-list (MQ / ACE / Splunk / Dynatrace) enforced before every outbound HTTP call.
 - All exceptions routed through `safe_error_message` — never raw upstream text.
 - All endpoints recorded in `queries-YYYY-MM-DD.jsonl` for audit.
 
@@ -52,6 +57,16 @@ Each tool keeps the same safety contract as the root server:
 > build's [README](../mqacemcpserver/README.md#splunk-3-tools-all-read-only)
 > and [docs/TOOLS.md](../docs/TOOLS.md#splunk-tools-3--read-only-log-search-for-triage--root-cause)
 > for the full Splunk tool reference and the ingestion prerequisite.
+
+> The five `dynatrace_*` tools answer historical performance "trend / statistics
+> over time" questions (server CPU/memory/disk, MQ/ACE component metric trends,
+> problems/alerts) via the Dynatrace Metrics / Entities / Problems API v2. They
+> require `DYNATRACE_URL_BASE` + `DYNATRACE_API_TOKEN` (scopes `metrics.read`,
+> `entities.read`, `problems.read`) and the env host prefix in
+> `DYNATRACE_ALLOWED_HOSTNAME_PREFIXES`. MQ/ACE metric keys are
+> deployment-specific — discover them with `dynatrace_list_metrics`. See the main
+> build's [README](../mqacemcpserver/README.md#dynatrace-5-tools-all-read-only)
+> for the full Dynatrace reference and prerequisites.
 
 ---
 
@@ -364,6 +379,8 @@ mqacemcpserver-single/
 │   ├── composite_tools.py     # The 6 composite tools + get_cert_details
 │   ├── splunk_tools.py        # The 3 read-only Splunk log-search tools
 │   ├── splunk_helpers.py      # Splunk REST search client (allow-list, SPL guard, ND-JSON parse)
+│   ├── dynatrace_tools.py     # The 5 read-only Dynatrace performance/problems tools
+│   ├── dynatrace_helpers.py   # Dynatrace API v2 client (Api-Token, allow-list, metric stats)
 │   ├── config.py              # env loader, with RESOURCES_DIR override pointing at ../resources/
 │   ├── mq_helpers.py          # MQ REST client, qmgr_dump.csv reader, MQSC prettifiers
 │   ├── ace_helpers.py         # ACE Admin REST client, node CSVs, fetch_ace
@@ -382,6 +399,7 @@ mqacemcpserver-single/
 │   ├── conftest.py            # Sets temp LOG_DIR before importing server.*
 │   ├── test_composite_tools.py # offline composite-tool tests (incl. multi-target)
 │   ├── test_splunk_tools.py   # 18 offline tests — SPL guard, ND-JSON parse, error sanitisation
+│   ├── test_dynatrace_tools.py # offline tests — allow-list, error sanitisation, metric stats, envelope
 │   └── test_csv_cache.py      # 4 tests — manifest auto-reload + freshness
 ├── requirements.txt           # Same as root: mcp, httpx, pandas, python-dotenv, uvicorn
 ├── .env.example               # Template; LOG_DIR=logs-single, MCP_PORT=8010
@@ -434,7 +452,7 @@ Copy-Item .env.example .env
 $env:MCP_TRANSPORT = "sse"
 .venv\Scripts\python.exe single_server.py
 
-# Smoke check — must print exactly 10 tool names (7 composite + 3 splunk_*)
+# Smoke check — must print exactly 15 tool names (7 composite + 3 splunk_* + 5 dynatrace_*)
 .venv\Scripts\python.exe -c "import single_server as m; print(sorted(m.mcp._tool_manager._tools.keys()))"
 
 # Live smoke test (37 cases via SSE) — see "Testing → Online smoke" below
@@ -461,7 +479,7 @@ cd C:\Workspace\hready\mqacemcp\mqacemcpserver-single
 
 ```powershell
 .venv\Scripts\python.exe -m pytest -q
-# Expected: 61 passed in ~8s (composite + splunk + csv_cache suites)
+# Expected: 72 passed in ~8s (composite + splunk + dynatrace + csv_cache suites)
 ```
 
 ### Useful pytest invocations
@@ -491,11 +509,14 @@ cd C:\Workspace\hready\mqacemcp\mqacemcpserver-single
 deny/allow lists, guard-before-HTTP ordering (unsafe SPL and disallowed host
 rejected with no network call), ND-JSON parsing, the success path, error
 sanitisation (no raw body leaks), and the `Splunk:` routing-prefix docstrings.
-The composite-tool coverage below:
+`test_dynatrace_tools.py` adds the Dynatrace coverage — allow-list /
+unconfigured guard-before-HTTP, error sanitisation (no token/body leaks),
+`metric_stats` summaries, entity-name quoting, the success envelope, and the
+`Dynatrace:` routing-prefix docstrings. The composite-tool coverage below:
 
 | # | Group | Test | What it asserts |
 | --- | --- | --- | --- |
-| 1 | catalogue | `test_expected_tools_registered` | tool set == exactly the 10 tools (7 composite + 3 `splunk_*`) |
+| 1 | catalogue | `test_expected_tools_registered` | tool set == exactly the 15 tools (7 composite + 3 `splunk_*` + 5 `dynatrace_*`) |
 | 2 | catalogue | `test_mq_tool_docstrings_open_with_routing_prefix` | every MQ tool's docstring starts with `IBM MQ:` |
 | 3 | catalogue | `test_ace_tool_docstrings_open_with_routing_prefix` | every ACE tool's docstring starts with `IBM ACE:` |
 | 4 | catalogue | `test_cert_tool_docstring_opens_with_routing_prefix` | `get_cert_details` docstring starts with `Certificate:` |

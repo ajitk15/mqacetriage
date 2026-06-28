@@ -129,6 +129,43 @@ SPLUNK_ALLOWED_HOSTNAME_PREFIXES: list[str] = _split_csv(
 )
 
 # ---------------------------------------------------------------------------
+# Dynatrace (read-only historical performance trends / problems)
+# ---------------------------------------------------------------------------
+# SaaS environment URL (e.g. https://abc12345.live.dynatrace.com) + a classic
+# API token (sent as "Authorization: Api-Token <token>") with scopes
+# metrics.read, entities.read, problems.read. Used by the Metrics / Entities /
+# Problems API v2 to answer "trend / statistics over time" questions that the
+# live MQ/ACE tools and the Splunk log search cannot.
+DYNATRACE_URL_BASE: str = os.getenv("DYNATRACE_URL_BASE", "").rstrip("/")
+DYNATRACE_API_TOKEN: str = os.getenv("DYNATRACE_API_TOKEN", "")
+
+# Allow-list applied to the DYNATRACE_URL_BASE hostname. Defaults EMPTY (blocks
+# until configured) — Dynatrace SaaS is external, so the operator must add their
+# environment host prefix (e.g. the env-id), unlike the internal lod/loq/lot
+# MQ/ACE convention.
+DYNATRACE_ALLOWED_HOSTNAME_PREFIXES: list[str] = _split_csv(
+    os.getenv("DYNATRACE_ALLOWED_HOSTNAME_PREFIXES", "")
+)
+
+# Metric selectors (comma-separated metric keys). Host metrics use stable
+# builtin:* defaults; MQ/ACE component metric keys are deployment-specific (they
+# depend on the installed extension), so they default EMPTY — discover the real
+# keys with the dynatrace_list_metrics tool and set these.
+DYNATRACE_HOST_METRIC_SELECTORS: list[str] = _split_csv(
+    os.getenv(
+        "DYNATRACE_HOST_METRIC_SELECTORS",
+        "builtin:host.cpu.usage,builtin:host.mem.usage,"
+        "builtin:host.disk.usedPct,builtin:host.cpu.load",
+    )
+)
+DYNATRACE_MQ_METRIC_SELECTORS: list[str] = _split_csv(
+    os.getenv("DYNATRACE_MQ_METRIC_SELECTORS", "")
+)
+DYNATRACE_ACE_METRIC_SELECTORS: list[str] = _split_csv(
+    os.getenv("DYNATRACE_ACE_METRIC_SELECTORS", "")
+)
+
+# ---------------------------------------------------------------------------
 # Resource files (CSV manifests)
 # ---------------------------------------------------------------------------
 # Default to the local resources/ for a standalone deploy, else the parent
@@ -167,6 +204,11 @@ def splunk_configured() -> bool:
     return bool(SPLUNK_URL_BASE and SPLUNK_USER and SPLUNK_PASSWORD)
 
 
+def dynatrace_configured() -> bool:
+    """Return True when the Dynatrace half has the minimum env to operate."""
+    return bool(DYNATRACE_URL_BASE and DYNATRACE_API_TOKEN)
+
+
 # ---------------------------------------------------------------------------
 # Boot-time visibility (warnings only — never crash on missing creds)
 # ---------------------------------------------------------------------------
@@ -185,6 +227,12 @@ if not ace_configured():
 if not splunk_configured():
     _bootstrap_logger.warning(
         "SPLUNK_USER/SPLUNK_PASSWORD not set — Splunk log-search tools will "
+        "return errors when invoked."
+    )
+
+if not dynatrace_configured():
+    _bootstrap_logger.warning(
+        "DYNATRACE_URL_BASE/DYNATRACE_API_TOKEN not set — Dynatrace tools will "
         "return errors when invoked."
     )
 

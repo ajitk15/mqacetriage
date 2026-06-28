@@ -42,6 +42,11 @@ def test_expected_tools_registered():
         "splunk_search_logs",
         "splunk_mq_errors",
         "splunk_ace_errors",
+        "dynatrace_host_performance",
+        "dynatrace_mq_metrics",
+        "dynatrace_ace_metrics",
+        "dynatrace_problems",
+        "dynatrace_list_metrics",
     }
     actual = set(single_server.mcp._tool_manager._tools.keys())
     assert actual == expected, f"unexpected tool set: {sorted(actual)}"

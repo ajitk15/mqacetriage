@@ -120,6 +120,11 @@ The same env vars can live in `.env` instead of being exported.
 | `SPLUNK_USER` / `SPLUNK_PASSWORD` | — | Splunk Basic Auth creds (use a search-only role). Tools error until set |
 | `SPLUNK_MQ_INDEX` / `SPLUNK_ACE_INDEX` | `ibm_mq` / `ibm_ace` | Indexes the canned MQ/ACE error searches target |
 | `SPLUNK_ALLOWED_HOSTNAME_PREFIXES` | `localhost,lod,loq,lot` | Comma-separated prefixes the Splunk tools may talk to |
+| `DYNATRACE_URL_BASE` | — | Dynatrace SaaS env URL, e.g. `https://abc12345.live.dynatrace.com`. Tools error until set |
+| `DYNATRACE_API_TOKEN` | — | Classic API token (scopes `metrics.read`, `entities.read`, `problems.read`). Sent as `Authorization: Api-Token …` |
+| `DYNATRACE_ALLOWED_HOSTNAME_PREFIXES` | — (empty) | Prefixes the Dynatrace tools may talk to. **Empty blocks all calls** — add your env host prefix (e.g. the env-id) |
+| `DYNATRACE_HOST_METRIC_SELECTORS` | `builtin:host.cpu.usage,…mem.usage,…disk.usedPct,…cpu.load` | Default host metrics for `dynatrace_host_performance` |
+| `DYNATRACE_MQ_METRIC_SELECTORS` / `DYNATRACE_ACE_METRIC_SELECTORS` | — (empty) | Deployment-specific MQ/ACE metric keys; discover with `dynatrace_list_metrics` |
 
 ## Security model
 
@@ -203,6 +208,36 @@ Splunk. Configure a Splunk Universal Forwarder (or equivalent) to monitor:
 
 Index and sourcetype names are configurable via the `SPLUNK_*` env vars, so the
 tools adapt to your Splunk naming without code changes.
+
+### Dynatrace (5 tools, all read-only)
+
+These answer the **historical performance "trend / statistics over time"**
+questions the live tools, inventory, and Splunk logs cannot — server CPU/memory/
+disk, MQ/ACE component metric trends, and problem/alert history. They call the
+Dynatrace **Metrics / Entities / Problems API v2** (GET-only, inherently
+read-only); the Dynatrace host passes the allow-list before any call, and
+user-supplied entity names are quoted to prevent selector injection. **Requires
+Dynatrace + OneAgent first — see "Dynatrace monitoring (prerequisite)" below.**
+
+| Name | What it does |
+| --- | --- |
+| `dynatrace_host_performance` | CPU / memory / disk (and load) trend + avg/min/max/last for one or more hosts over a time window. |
+| `dynatrace_mq_metrics` | Historical IBM MQ component metric trends (queue depth, message rates, …) per queue manager. Keys are deployment-specific. |
+| `dynatrace_ace_metrics` | Historical IBM ACE component metric trends (flow throughput, processing time, …) per integration node. Keys are deployment-specific. |
+| `dynatrace_problems` | Recent problems / anomalies / alerts over a window, optionally scoped to host(s), for incident correlation. |
+| `dynatrace_list_metrics` | Search the Dynatrace metric catalogue for available metric keys (to find the MQ/ACE keys for the two tools above). |
+
+#### Dynatrace monitoring (prerequisite — not provided by this server)
+
+The Dynatrace tools need a Dynatrace SaaS environment plus an API token with the
+`metrics.read`, `entities.read`, and `problems.read` scopes (set
+`DYNATRACE_URL_BASE` + `DYNATRACE_API_TOKEN`, and add the env host prefix to
+`DYNATRACE_ALLOWED_HOSTNAME_PREFIXES`). **OneAgent** on the MQ/ACE hosts provides
+host CPU/memory/disk automatically. **Component** metrics (MQ queue depth, ACE
+flow throughput, …) require the relevant Dynatrace IBM MQ / ACE extension (or
+custom metrics); because the metric keys are deployment-specific they are
+configurable (`DYNATRACE_MQ_METRIC_SELECTORS` / `DYNATRACE_ACE_METRIC_SELECTORS`)
+and discoverable via `dynatrace_list_metrics` — no code changes needed.
 
 For a detailed per-tool walkthrough — inputs, resolution chain,
 fallback behaviour, recorded endpoints — see

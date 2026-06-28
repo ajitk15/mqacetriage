@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A single Model Context Protocol (MCP) server (`mqacemcpserver`) that exposes
 read-only diagnostic tools for **IBM MQ** and **IBM App Connect Enterprise (ACE)**
 — plus read-only **Splunk** log search (`splunk_*`) for historical triage /
-root-cause — under one endpoint. The hosting orchestrator's LLM picks the right
+root-cause, and read-only **Dynatrace** (`dynatrace_*`) for historical
+performance trends/statistics (server CPU/memory/disk, MQ/ACE component metrics,
+problems/alerts) — under one endpoint. The hosting orchestrator's LLM picks the right
 tool from the unified tool list — there is no in-server router. Production
 posture: the central team consumes one SSE endpoint; everything else (logging,
 sanitised errors, allow-list, read-only enforcement) is in-process.
@@ -60,10 +62,10 @@ itself — the env vars must be set first.
 
 ### Tool routing without a dispatcher
 Every MQ tool's docstring opens with `IBM MQ:`, every ACE tool's with `IBM ACE:`,
-the certificate tool's with `Certificate:`, and every Splunk log-search tool's
-with `Splunk:`.
+the certificate tool's with `Certificate:`, every Splunk log-search tool's with
+`Splunk:`, and every Dynatrace tool's with `Dynatrace:`.
 Tool **names** are also disambiguated (`dspmq`, `runmqsc`, `list_ace_nodes`,
-`get_cert_details`, `splunk_mq_errors`, …).
+`get_cert_details`, `splunk_mq_errors`, `dynatrace_host_performance`, …).
 The orchestrator's LLM uses these to route — preserve both conventions whenever
 adding or renaming a tool, otherwise routing degrades silently.
 
@@ -80,11 +82,14 @@ breaks tool registration.
 ### Safety is enforced in three places, do not bypass any of them
 1. **Hostname allow-list** (`server/safety.py:is_hostname_allowed`) — every outbound
    call resolves a target hostname, then checks it against
-   `MQ_ALLOWED_HOSTNAME_PREFIXES`, `ACE_ALLOWED_HOSTNAME_PREFIXES`, or
-   `SPLUNK_ALLOWED_HOSTNAME_PREFIXES`. There are **three separate allow-lists**
-   (MQ, ACE, and Splunk infra typically live on different host families). Wrappers in
-   `mq_helpers.py`, `ace_helpers.py`, and `splunk_helpers.py` (each a `hostname_allowed`)
-   call into the shared primitive with the right list.
+   `MQ_ALLOWED_HOSTNAME_PREFIXES`, `ACE_ALLOWED_HOSTNAME_PREFIXES`,
+   `SPLUNK_ALLOWED_HOSTNAME_PREFIXES`, or `DYNATRACE_ALLOWED_HOSTNAME_PREFIXES`.
+   There are **four separate allow-lists** (MQ, ACE, Splunk, and Dynatrace infra
+   typically live on different host families — Dynatrace is external SaaS, so its
+   list defaults EMPTY and must be set to the env host prefix). Wrappers in
+   `mq_helpers.py`, `ace_helpers.py`, `splunk_helpers.py`, and
+   `dynatrace_helpers.py` (each a `hostname_allowed`) call into the shared
+   primitive with the right list.
 2. **Read-only MQSC** (`server/safety.py:is_modification_command`) — `runmqsc` and
    `run_mqsc_for_object` block ALTER/DEFINE/DELETE/CLEAR/MOVE/SET/RESET/START/STOP/
    PURGE/REFRESH/RESOLVE/ARCHIVE/BACKUP and return `MODIFY_BLOCKED_MSG` instead.
@@ -172,6 +177,26 @@ use `mq_get`/`mq_post` for MQ, `fetch_ace` for ACE, and `run_spl` for Splunk.
 5. Do NOT default a `source_type`/sourcetype filter to a guessed value —
    sourcetypes are deployment-specific; let the index scope narrow the search.
 
+### Adding a new Dynatrace tool — minimum checklist
+1. Implement in `server/dynatrace_tools.py` inside `register(mcp)` (mirror it in
+   both builds — the single build ships its own `server/` package; the
+   `dynatrace_helpers.py` / `dynatrace_tools.py` files are byte-identical across
+   builds, so copy, don't fork).
+2. Both decorators (same order). Tool name uses the `dynatrace_` prefix.
+3. Docstring opens with `Dynatrace:`.
+4. Call the API via the `dynatrace_helpers` functions (`run_metric_query`,
+   `resolve_entities`, `run_problems`, `list_metrics`) — each applies the
+   Dynatrace allow-list (and an unconfigured-guard) BEFORE the HTTP call, records
+   the endpoint, and routes failures through `safe_error_message`. They return
+   `(data | None, error_message | None)`. The v2 endpoints are GET-only
+   (inherently read-only), so there is no SPL-style write guard — but ALWAYS pass
+   user-supplied entity names through `_dt_quote` before putting them in an
+   `entitySelector` (selector-injection guard).
+5. Do NOT hardcode MQ/ACE metric keys — they are deployment-specific (like Splunk
+   sourcetypes). Default them from `DYNATRACE_*_METRIC_SELECTORS` (empty → tell
+   the caller to run `dynatrace_list_metrics`); only `builtin:host.*` keys are
+   safe defaults.
+
 ## Logging contract for Power BI
 
 Two file-based logs in `LOG_DIR` (default `<project>/logs/`), daily-rotated:
@@ -194,8 +219,15 @@ locations are a separate concern: config still auto-detects standalone — its o
 `resources/`.) The full table is in `mqacemcpserver/README.md`. Namespaces
 operators most often touch:
 - `MQ_ALLOWED_HOSTNAME_PREFIXES` / `ACE_ALLOWED_HOSTNAME_PREFIXES` /
-  `SPLUNK_ALLOWED_HOSTNAME_PREFIXES` — comma-separated hostname prefixes;
-  MQ/ACE default `lod,loq,lot`, Splunk default `localhost,lod,loq,lot`.
+  `SPLUNK_ALLOWED_HOSTNAME_PREFIXES` / `DYNATRACE_ALLOWED_HOSTNAME_PREFIXES` —
+  comma-separated hostname prefixes; MQ/ACE default `lod,loq,lot`, Splunk default
+  `localhost,lod,loq,lot`, Dynatrace defaults EMPTY (external SaaS — set the env
+  host prefix).
+- `DYNATRACE_URL_BASE` (SaaS env URL, e.g. `https://abc12345.live.dynatrace.com`),
+  `DYNATRACE_API_TOKEN` (classic token, scopes `metrics.read`/`entities.read`/
+  `problems.read`), and `DYNATRACE_HOST_METRIC_SELECTORS` /
+  `DYNATRACE_MQ_METRIC_SELECTORS` / `DYNATRACE_ACE_METRIC_SELECTORS` (MQ/ACE keys
+  are deployment-specific — discover with `dynatrace_list_metrics`).
 - `SPLUNK_URL_BASE` (splunkd REST/search port, e.g. `https://localhost:8089`),
   `SPLUNK_USER` / `SPLUNK_PASSWORD`, and `SPLUNK_MQ_INDEX` / `SPLUNK_ACE_INDEX`
   (must match where the forwarder lands the MQ/ACE logs — they're

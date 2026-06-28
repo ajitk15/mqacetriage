@@ -105,6 +105,36 @@ SPLUNK_ALLOWED_HOSTNAME_PREFIXES: list[str] = _split_csv(
     os.getenv("SPLUNK_ALLOWED_HOSTNAME_PREFIXES", "localhost,lod,loq,lot")
 )
 
+# Dynatrace (read-only historical performance trends / problems). SaaS env URL
+# (e.g. https://abc12345.live.dynatrace.com) + a classic API token (sent as
+# "Authorization: Api-Token <token>") with scopes metrics.read, entities.read,
+# problems.read. Used by the Metrics / Entities / Problems API v2.
+DYNATRACE_URL_BASE: str = os.getenv("DYNATRACE_URL_BASE", "").rstrip("/")
+DYNATRACE_API_TOKEN: str = os.getenv("DYNATRACE_API_TOKEN", "")
+
+# Allow-list for the DYNATRACE_URL_BASE hostname. Defaults EMPTY (blocks until
+# configured) — Dynatrace SaaS is external, so add your environment host prefix.
+DYNATRACE_ALLOWED_HOSTNAME_PREFIXES: list[str] = _split_csv(
+    os.getenv("DYNATRACE_ALLOWED_HOSTNAME_PREFIXES", "")
+)
+
+# Metric selectors. Host metrics use stable builtin:* defaults; MQ/ACE component
+# metric keys are deployment-specific (depend on the installed extension) so they
+# default EMPTY — discover them with dynatrace_list_metrics and set these.
+DYNATRACE_HOST_METRIC_SELECTORS: list[str] = _split_csv(
+    os.getenv(
+        "DYNATRACE_HOST_METRIC_SELECTORS",
+        "builtin:host.cpu.usage,builtin:host.mem.usage,"
+        "builtin:host.disk.usedPct,builtin:host.cpu.load",
+    )
+)
+DYNATRACE_MQ_METRIC_SELECTORS: list[str] = _split_csv(
+    os.getenv("DYNATRACE_MQ_METRIC_SELECTORS", "")
+)
+DYNATRACE_ACE_METRIC_SELECTORS: list[str] = _split_csv(
+    os.getenv("DYNATRACE_ACE_METRIC_SELECTORS", "")
+)
+
 # Resource files (CSV manifests). Default to the local resources/ folder for a
 # standalone deploy, else the parent repo's resources/ so the external extract
 # jobs feed both servers from one location. Override individual paths in .env
@@ -142,6 +172,11 @@ def splunk_configured() -> bool:
     return bool(SPLUNK_URL_BASE and SPLUNK_USER and SPLUNK_PASSWORD)
 
 
+def dynatrace_configured() -> bool:
+    """Return True when the Dynatrace half has the minimum env to operate."""
+    return bool(DYNATRACE_URL_BASE and DYNATRACE_API_TOKEN)
+
+
 if not mq_configured():
     _bootstrap_logger.warning(
         "MQ_URL_BASE or MQ_USER_NAME not set — IBM MQ tools will return "
@@ -157,6 +192,12 @@ if not ace_configured():
 if not splunk_configured():
     _bootstrap_logger.warning(
         "SPLUNK_USER/SPLUNK_PASSWORD not set — Splunk log-search tools will "
+        "return errors when invoked."
+    )
+
+if not dynatrace_configured():
+    _bootstrap_logger.warning(
+        "DYNATRACE_URL_BASE/DYNATRACE_API_TOKEN not set — Dynatrace tools will "
         "return errors when invoked."
     )
 
