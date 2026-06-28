@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+.env.local
+
+# TLS certs (self-signed, local dev only)
+
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+custom-logs/
+logs-single/
+
+# Runtime artifacts
+scripts/.pids
