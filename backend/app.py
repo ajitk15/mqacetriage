@@ -15,6 +15,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from dotenv import load_dotenv
@@ -39,7 +40,9 @@ from schemas import (
     ToolResultEvent,
 )
 
-load_dotenv()
+# Self-contained: read ONLY this app's own backend/.env (resolved via __file__,
+# so the working directory does not matter — no parent/repo-root fallback).
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),

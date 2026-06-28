@@ -29,7 +29,8 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r mqacemcpserver\requirements.txt
 
-# Run (stdio, default) — from repo root; cwd stays root so .env/resources resolve
+# Run (stdio, default) — from repo root so shared resources/ and relative TLS
+# paths resolve (the build's own mqacemcpserver/.env is found via __file__)
 .venv\Scripts\python.exe mqacemcpserver\mqacemcpserver.py
 
 # Run (SSE — endpoint at http://MCP_HOST:MCP_PORT/sse, healthz at /healthz)
@@ -184,11 +185,14 @@ with `"[REDACTED]"`. To opt a parameter into redaction, name it accordingly.
 
 ## Environment variables
 
-Loaded from `.env` (repo root) by `mqacemcpserver/server/config.py` at import
-time — the config auto-detects whether it's running standalone (its own
-`resources/` beside the code) or in the mono-repo (shared root `resources/` and
-`.env`). The full table is in `mqacemcpserver/README.md`. Namespaces operators
-most often touch:
+Loaded from this build's OWN `.env` (`mqacemcpserver/.env`) by
+`mqacemcpserver/server/config.py` at import time, resolved via `__file__` so the
+working directory does not matter. **Every app is self-contained and reads only
+its own `<app_dir>/.env` — there is no repo-root `.env`.** (Resource/log default
+locations are a separate concern: config still auto-detects standalone — its own
+`resources/` beside the code — vs. mono-repo, sharing the parent repo's
+`resources/`.) The full table is in `mqacemcpserver/README.md`. Namespaces
+operators most often touch:
 - `MQ_ALLOWED_HOSTNAME_PREFIXES` / `ACE_ALLOWED_HOSTNAME_PREFIXES` /
   `SPLUNK_ALLOWED_HOSTNAME_PREFIXES` — comma-separated hostname prefixes;
   MQ/ACE default `lod,loq,lot`, Splunk default `localhost,lod,loq,lot`.
@@ -226,18 +230,22 @@ as separate products in one repo, each independently deployable (own
 - `scripts/start-all.ps1` / `start-streamlit.ps1` / `stop-all.ps1` — launchers
   that pre-flight prereqs and spawn the service windows. `start-all.ps1` brings up
   **both** MCP builds side by side — the main build (`mqacemcpserver`, :8009,
-  reads root `.env`) and the single build (`mqacemcpserver-single`, :8010, reads
-  its own `.env`) — plus backend :8002, Streamlit UI :8003, dashboard :8004. The
+  reads `mqacemcpserver/.env`) and the single build (`mqacemcpserver-single`,
+  :8010, reads its own `.env`) — plus backend :8002, Streamlit UI :8003,
+  dashboard :8004. The
   backend defaults to the main build (:8009); the Streamlit sidebar lets a user
   switch to the single build or a custom MCP URL at runtime (see backend
   `MCP_SERVERS_JSON` and `/api/mcp/connect`). `-SkipMcp` skips both MCP builds;
   `-SkipMcpMain` / `-SkipMcpSingle` skip one. Other `-Skip*` switches isolate a
   tier. Both `start-all.ps1` and `start-streamlit.ps1` launch the Streamlit UI
   from `frontend/`.
-- The dashboard process (`dashboard/dashboard_server.py`) does **not** load
-  `dashboard/.env` itself — it reads `MCP_DASHBOARD_PORT` / `MCP_SERVER_DIR` /
-  `MCP_DASHBOARD_SERVERS_JSON` from the process environment and gets TLS from the
-  imported build's `server.config`. It renders **one tab per MCP build**: `/dashboard`
+- The dashboard process (`dashboard/dashboard_server.py`) loads its own
+  `dashboard/.env` at startup (before importing the build's `server.config`),
+  with `override=False` so any var already in the process environment wins. That
+  means `start-all.*`'s injected `MCP_DASHBOARD_PORT` / `MCP_SERVER_DIR` /
+  `MCP_DASHBOARD_SERVERS_JSON` still take precedence, while a standalone
+  dashboard deploy is configured by `dashboard/.env` alone. TLS still comes from
+  the imported build's `server.config`. It renders **one tab per MCP build**: `/dashboard`
   is a tabbed wrapper, `/dashboard/<key>` is that build's full dashboard for its log
   dir. `start-all.*` injects `MCP_SERVER_DIR` (the main build, for TLS),
   `MCP_DASHBOARD_PORT`, and `MCP_DASHBOARD_SERVERS_JSON` (both builds' log dirs:

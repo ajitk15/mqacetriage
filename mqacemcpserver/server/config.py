@@ -17,19 +17,20 @@ from dotenv import load_dotenv
 # .env / resource discovery
 # ---------------------------------------------------------------------------
 # PROJECT_ROOT is the parent of the `server/` package — i.e. this build's own
-# folder (`mqacemcpserver/`). The build can be deployed two ways:
-#   - standalone: ships its own `resources/` (and `.env`) next to the code.
-#   - mono-repo:  shares the parent repo's root-level `resources/` and `.env`,
-#                 so the daily extract job feeds every build from one place.
-# Detect which once, and base default resource/log/.env locations on it.
-# Explicit env overrides (RESOURCES_DIR, *_PATH, LOG_DIR) always win.
+# folder (`mqacemcpserver/`). This build is SELF-CONTAINED: it reads ONLY its
+# own `.env` (mqacemcpserver/.env), resolved via __file__ so the working
+# directory does not matter. There is no repo-root `.env` fallback.
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
-_STANDALONE: bool = (PROJECT_ROOT / "resources").is_dir()
-_BASE_DIR: Path = PROJECT_ROOT if _STANDALONE else PROJECT_ROOT.parent
-
-ENV_PATH: Path = _BASE_DIR / ".env"
+ENV_PATH: Path = PROJECT_ROOT / ".env"
 
 load_dotenv(dotenv_path=ENV_PATH)
+
+# Resource/log default locations are a separate concern from .env discovery: a
+# standalone deploy ships its own `resources/` next to the code; the mono-repo
+# layout shares the parent repo's `resources/`. Detect which once and base the
+# defaults on it. Explicit env overrides (RESOURCES_DIR, *_PATH, LOG_DIR) win.
+_STANDALONE: bool = (PROJECT_ROOT / "resources").is_dir()
+_BASE_DIR: Path = PROJECT_ROOT if _STANDALONE else PROJECT_ROOT.parent
 
 # A bootstrap logger — server.logger uses MQACE_LOG_LEVEL set below, but we
 # need to surface config issues before that module is configured.

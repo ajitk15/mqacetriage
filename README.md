@@ -20,12 +20,15 @@ Each top-level folder is its own deliverable — own entry point, own
 
 ## Shared vs. isolated
 
-- **Shared at repo root:** `resources/`, `.env`, and the main build's dev `.venv`.
-  Each server build auto-detects whether it runs standalone (its own `resources/`
-  beside the code) or in this mono-repo (reads the shared root `resources/` and
-  `.env`), so the same code deploys either way.
-- **Isolated per component:** entry point, `requirements.txt`, and (for the
-  chatbot tiers) their own `.env` and venv. Deploy any one folder on its own.
+- **Shared at repo root:** `resources/` and the main build's dev `.venv`.
+  Each server build auto-detects whether its **resource/log** defaults come from
+  a standalone layout (its own `resources/` beside the code) or this mono-repo
+  (the shared root `resources/`), so the same code deploys either way.
+- **Isolated per component:** entry point, `requirements.txt`, and its **own
+  `.env` / `.env.example` / `.env.example.linux`** and venv. Every component
+  (both server builds included) reads only its own `<dir>/.env` — there is no
+  repo-root `.env`. Deploy any one folder on its own by copying that folder's
+  `.env.example` (or `.env.example.linux` on RHEL) to `.env`.
 
 ## Quick start (full local stack)
 

@@ -11,9 +11,11 @@ tool list based on the user's question — no in-server routing required.
 
 > **Layout note:** this build lives in `mqacemcpserver/`. Its dev `.venv`
 > stays at the **repo root** (shared); commands below run from the repo root
-> unless stated otherwise. The server auto-detects whether it runs standalone
-> (its own `resources/` beside the code) or in the mono-repo (shared root
-> `resources/` and `.env`).
+> unless stated otherwise. The server reads its OWN `mqacemcpserver/.env`
+> (resolved via `__file__`, so the working directory does not matter — there is
+> no repo-root `.env`). For resource/log defaults it still auto-detects
+> standalone (its own `resources/` beside the code) vs. mono-repo (shared root
+> `resources/`).
 
 ## Setup
 
@@ -22,8 +24,8 @@ tool list based on the user's question — no in-server routing required.
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r mqacemcpserver\requirements.txt
-copy .env.example .env
-# then edit .env with real MQ / ACE credentials and allow-list prefixes
+copy mqacemcpserver\.env.example mqacemcpserver\.env
+# then edit mqacemcpserver\.env with real MQ / ACE credentials + allow-list prefixes
 ```
 
 Drop the inventory CSVs into `resources/`:
@@ -336,7 +338,7 @@ mqacemcp/                    # repo root
 ├── mqacemcpserver/          # THIS build — unified MQ + ACE MCP server
 │   ├── mqacemcpserver.py    #   entry point
 │   ├── server/
-│   │   ├── config.py        #   .env loading, typed settings, standalone/mono-repo detection
+│   │   ├── config.py        #   own-.env loading (mqacemcpserver/.env), typed settings, resource standalone/mono-repo detection
 │   │   ├── logger.py        #   stdlib logging factory + daily-rotated file handler
 │   │   ├── query_log.py     #   per-call JSONL query log + logged_tool decorator
 │   │   ├── errors.py        #   user-safe error sanitiser (ref-tagged messages)
@@ -358,7 +360,8 @@ mqacemcp/                    # repo root
 ├── docs/                    # overview / supplementary docs: CONNECTING.md, TOOLS.md, deck (.pptx)
 ├── logs/                    # app-*.log + queries-*.jsonl (runtime, gitignored; LOG_DIR can redirect)
 ├── .venv/                   # shared dev venv for the main build (gitignored)
-├── .env / .env.example      # shared config (root)
+│   # each app holds its OWN .env / .env.example / .env.example.linux
+│   # (mqacemcpserver/, mqacemcpserver-single/, backend/, frontend/, dashboard/)
 ├── render.yaml              # Render blueprint for backend + frontend
 ├── CLAUDE.md                # repo-specific guidance for Claude Code
 └── README.md                # repo overview / component index

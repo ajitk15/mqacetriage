@@ -1,7 +1,8 @@
 """Generate the HTTP Basic Auth header for the MCP SSE endpoint.
 
-By default reads MCP_AUTH_USER / MCP_AUTH_PASSWORD from the project `.env`
-and prints both the base64 token and the full `Authorization` header value
+By default reads MCP_AUTH_USER / MCP_AUTH_PASSWORD from the main build's
+`mqacemcpserver/.env` and prints both the base64 token and the `Authorization`
+header value
 so you can paste either into the MCP Inspector, Claude Desktop config,
 or a curl command.
 
@@ -22,7 +23,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-ENV_PATH = PROJECT_ROOT / ".env"
+# The MCP auth creds live in the main build's own .env (each app is
+# self-contained — there is no repo-root .env).
+ENV_PATH = PROJECT_ROOT / "mqacemcpserver" / ".env"
 
 
 def main() -> int:

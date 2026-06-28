@@ -30,7 +30,7 @@ This matters because the imported build's `server.config` is what loads that
 build's `.env` and therefore sets **`LOG_DIR`** (which logs the dashboard reads)
 and **TLS** (`MCP_TLS_CERT` / `MCP_TLS_KEY`). Pointing `MCP_SERVER_DIR` at the
 single build makes the dashboard read `mqacemcpserver-single/`'s `LOG_DIR`; the
-main build reads the repo-root `.env`'s `LOG_DIR`. If the two disagree, the
+main build reads `mqacemcpserver/.env`'s `LOG_DIR`. If the two disagree, the
 dashboard reads an empty directory and renders "No data".
 
 ## One-time setup
@@ -77,14 +77,16 @@ Most of the time you don't run it bare — `scripts\start-all.ps1` /
 
 ## Configuration
 
-`dashboard_server.py` does **not** load any `.env` file of its own. It resolves
-config from two places:
+`dashboard_server.py` loads its own `dashboard/.env` at startup (with
+`override=False`, so anything already in the process environment wins). It then
+resolves config from:
 
 1. **Process environment** — `MCP_DASHBOARD_HOST`, `MCP_DASHBOARD_PORT`, and
-   `MCP_SERVER_DIR` are read with `os.getenv` (defaults below).
+   `MCP_SERVER_DIR` are read with `os.getenv` (defaults below). Values injected
+   by `start-all` take precedence over `dashboard/.env` (override=False).
 2. **The imported build's `server.config`** — that module loads the build's own
-   `.env` (root `.env` for the main build, `mqacemcpserver-single/.env` for the
-   single build) and supplies `LOG_DIR` plus the TLS cert/key.
+   `.env` (`mqacemcpserver/.env` for the main build, `mqacemcpserver-single/.env`
+   for the single build) and supplies `LOG_DIR` plus the TLS cert/key.
 
 | Var | Read from | Default | Purpose |
 | --- | --- | --- | --- |
@@ -127,8 +129,8 @@ a short "run the benchmark" hint.
 
 ### `dashboard/.env` and the launchers
 
-`dashboard/.env` documents the intended dashboard settings, but **the server
-does not auto-load it**. Instead, `scripts/start-all.ps1` / `start-all.sh` read
+When run on its own, the server loads `dashboard/.env` directly. Under
+`start-all`, `scripts/start-all.ps1` / `start-all.sh` also read
 `MCP_DASHBOARD_PORT` from it and inject it — along with `MCP_SERVER_DIR` (the
 main build, for TLS) and `MCP_DASHBOARD_SERVERS_JSON` (both builds' log dirs:
 main → `custom-logs`, single → `mqacemcpserver-single/logs`) — into the

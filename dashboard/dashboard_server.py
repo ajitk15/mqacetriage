@@ -39,6 +39,14 @@ from pathlib import Path
 # directory (e.g. to point at the single-build's `server` package instead).
 _DASHBOARD_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _DASHBOARD_DIR.parent
+
+# Self-contained: load this app's own dashboard/.env BEFORE importing
+# server.config (which loads the MCP build's own .env). load_dotenv defaults to
+# override=False, so process-env values injected by start-all (MCP_SERVER_DIR,
+# MCP_DASHBOARD_*) still win — the combined launcher is unaffected.
+from dotenv import load_dotenv  # noqa: E402
+load_dotenv(_DASHBOARD_DIR / ".env")
+
 _MCP_DIR = Path(os.getenv("MCP_SERVER_DIR", str(_REPO_ROOT / "mqacemcpserver"))).resolve()
 for _p in (_DASHBOARD_DIR, _MCP_DIR):
     if str(_p) not in sys.path:

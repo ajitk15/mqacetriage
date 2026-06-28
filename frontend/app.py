@@ -11,10 +11,13 @@ from __future__ import annotations
 import os
 import uuid
 from html import escape
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()  # picks up MCP_BACKEND_URL / PAGE_TITLE from .env if present
+# Self-contained: read ONLY this app's own frontend/.env (resolved via
+# __file__, so the working directory does not matter — no parent fallback).
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 import streamlit as st
 

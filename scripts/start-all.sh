@@ -14,7 +14,7 @@
 #   4. Streamlit UI (frontend/app.py, on :8003)
 #   5. Dashboard    (dashboard/dashboard_server.py, on :8004)
 #
-# Both MCP builds run side by side: the main build reads the repo-root .env
+# Both MCP builds run side by side: the main build reads mqacemcpserver/.env
 # (:8009), the single build reads mqacemcpserver-single/.env (:8010). The backend
 # defaults to the main build; users can switch to the single build or a custom
 # server from the Streamlit sidebar.
@@ -70,11 +70,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-# Both MCP builds run side by side. Each reads its own .env: the main build the
-# repo-root .env, the single build mqacemcpserver-single/.env.
+# Both MCP builds run side by side. Each reads its own .env: the main build
+# mqacemcpserver/.env, the single build mqacemcpserver-single/.env.
 MCP_MAIN_DIR="$REPO_ROOT/mqacemcpserver"
 MCP_MAIN_ENTRY="$MCP_MAIN_DIR/mqacemcpserver.py"
-MCP_MAIN_ENV="$REPO_ROOT/.env"
+MCP_MAIN_ENV="$MCP_MAIN_DIR/.env"
 MCP_SINGLE_DIR="$REPO_ROOT/mqacemcpserver-single"
 MCP_SINGLE_ENTRY="$MCP_SINGLE_DIR/single_server.py"
 MCP_SINGLE_ENV="$MCP_SINGLE_DIR/.env"
@@ -157,7 +157,7 @@ if [[ $ANY_MCP -eq 1 ]]; then
     if [[ $SKIP_MCP_SINGLE -eq 0 ]]; then
         [[ -f "$MCP_SINGLE_ENTRY" ]] && ok "single_server.py present (:$MCP_SINGLE_PORT)" || { problems+=("Missing single MCP entry $MCP_SINGLE_ENTRY."); bad "$MCP_SINGLE_ENTRY not found"; }
     fi
-    [[ -f "$MCP_MAIN_ENV" ]] && ok "root .env present" || note "root .env missing (main build will start but tools may error)."
+    [[ -f "$MCP_MAIN_ENV" ]] && ok "mqacemcpserver/.env present" || note "mqacemcpserver/.env missing (main build will start but tools may error)."
 fi
 
 if [[ $SKIP_BACKEND -eq 0 ]]; then
@@ -206,7 +206,7 @@ start_service() {
     ok "$title started (PID $(tail -n1 "$PID_FILE"))"
 }
 
-# 1. MCP main build (reads repo-root .env via __file__ -> :8009)
+# 1. MCP main build (reads mqacemcpserver/.env via __file__ -> :8009)
 if [[ $SKIP_MCP_MAIN -eq 0 ]]; then
     ( cd "$REPO_ROOT" && MCP_TRANSPORT=sse nohup "$ROOT_VENV_PY" "$MCP_MAIN_ENTRY" >"$LOG_DIR/mcp-main.log" 2>&1 & echo $! >>"$PID_FILE" )
     ok "MCP Main (SSE :$MCP_MAIN_PORT) started (PID $(tail -n1 "$PID_FILE"))"
@@ -237,9 +237,9 @@ fi
 if [[ $SKIP_DASHBOARD -eq 0 ]]; then
     # Render one tab per MCP build: hand it both builds' log dirs via
     # MCP_DASHBOARD_SERVERS_JSON. MCP_SERVER_DIR points at the main build for
-    # shared TLS config. dashboard_server.py never loads dashboard/.env itself —
-    # it reads these from process env. Build the JSON with python so paths and
-    # quotes are escaped correctly.
+    # shared TLS config. dashboard_server.py loads its own dashboard/.env with
+    # override=False, so these process-env values still win. Build the JSON with
+    # python so paths and quotes are escaped correctly.
     DASH_SERVERS_JSON="$("$PYTHON_BIN" -c 'import json,sys; print(json.dumps([{"name":sys.argv[1],"key":"main","log_dir":sys.argv[2]},{"name":sys.argv[3],"key":"single","log_dir":sys.argv[4]}]))' \
         "mqacemcpserver (:$MCP_MAIN_PORT)" "$MCP_MAIN_LOGDIR" \
         "mqacemcpserver-single (:$MCP_SINGLE_PORT)" "$MCP_SINGLE_LOGDIR")"
