@@ -35,7 +35,7 @@ both set in `.env`. Generate the header value once:
 ```powershell
 .venv\Scripts\python.exe scripts\gen_basic_auth.py
 # prints:
-# Authorization head:  Basic bWNwYWRtaW46TXlSZWFsUGFzc3dvcmQ=
+# Authorization head:  Basic xxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Every snippet below uses that string verbatim. Re-run the script if the password changes.
